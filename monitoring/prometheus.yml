@@ -2,9 +2,7 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-rule_files:
-  # - "first_rules.yml"
-  # - "second_rules.yml"
+rule_files: []
 
 scrape_configs:
   - job_name: 'prometheus'
@@ -19,14 +17,11 @@ scrape_configs:
   - job_name: 'traefik'
     static_configs:
       - targets: ['traefik:8080']
-    metrics_path: '/metrics'
 
   - job_name: 'postgres'
     static_configs:
       - targets: ['postgres:5432']
-    scrape_interval: 30s
 
-  - job_name: 'node-exporter'
+  - job_name: 'redis'
     static_configs:
-      - targets: ['node-exporter:9100']
-    scrape_interval: 30s
+      - targets: ['redis:6379']
