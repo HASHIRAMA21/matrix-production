@@ -1,0 +1,162 @@
+server_name: matrix.localhost
+pid_file: /data/homeserver.pid
+web_client_location: https://app.element.io/
+
+public_baseurl: https://matrix.localhost:8443/
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    bind_addresses: ['::1', '127.0.0.1', '0.0.0.0']
+    resources:
+      - names: [client, federation]
+        compress: false
+
+database:
+  name: psycopg2
+  args:
+    user: synapse
+    password: changeme
+    database: synapse
+    host: postgres
+    port: 5432
+    cp_min: 5
+    cp_max: 10
+
+log_config: "/data/matrix.localhost.log.config"
+
+media_store_path: /data/media_store
+
+registration_shared_secret: "changeme_registration_secret"
+
+report_stats: false
+
+macaroon_secret_key: "changeme_macaroon_secret"
+
+form_secret: "changeme_form_secret"
+
+signing_key_path: "/data/matrix.localhost.signing.key"
+
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+enable_registration: false
+enable_registration_without_verification: false
+
+bcrypt_rounds: 12
+
+allow_guest_access: false
+
+default_room_version: "9"
+
+gc_thresholds: [700, 10, 10]
+
+event_cache_size: 10K
+
+enable_media_repo: true
+max_upload_size: 50M
+max_image_pixels: 32M
+
+url_preview_enabled: false
+
+registrations_require_3pid: []
+
+allowed_3pid_medium: []
+
+auto_join_rooms: []
+
+autocreate_auto_join_rooms: true
+
+user_directory:
+    enabled: true
+    search_all_users: false
+
+use_presence: true
+
+require_auth_for_profile_requests: false
+
+allow_public_rooms_without_auth: false
+
+default_identity_server: https://vector.im
+
+account_threepid_delegates:
+    msisdn: https://vector.im
+
+room_prejoin_state:
+    default_fields:
+        - "m.room.avatar"
+        - "m.room.canonical_alias"
+        - "m.room.encryption"
+        - "m.room.guest_access"
+        - "m.room.history_visibility"
+        - "m.room.join_rules"
+        - "m.room.name"
+        - "m.room.server_acl"
+        - "m.room.tombstone"
+
+max_avatar_size: 10M
+allowed_avatar_mimetypes: ["image/png", "image/jpeg", "image/gif"]
+
+redaction_retention_period: 7d
+
+user_ips_max_age: 28d
+
+inhibit_user_in_use_error: false
+
+app_service_config_files: []
+
+track_appservice_user_ips: false
+
+redis:
+  enabled: false
+
+federation_ip_range_blacklist:
+  - '127.0.0.0/8'
+  - '10.0.0.0/8'
+  - '172.16.0.0/12'
+  - '192.168.0.0/16'
+  - '100.64.0.0/10'
+  - '169.254.0.0/16'
+  - '::1/128'
+  - 'fe80::/64'
+  - 'fc00::/7'
+
+ip_range_blacklist:
+  - '127.0.0.0/8'
+  - '10.0.0.0/8'
+  - '172.16.0.0/12'
+  - '192.168.0.0/16'
+  - '100.64.0.0/10'
+  - '169.254.0.0/16'
+  - '::1/128'
+  - 'fe80::/64'
+  - 'fc00::/7'
+
+retention:
+  enabled: false
+
+forgotten_room_retention_period: 7d
+
+email:
+  smtp_host: localhost
+  smtp_port: 587
+  smtp_user: ""
+  smtp_pass: ""
+  force_tls: false
+  require_transport_security: false
+  enable_tls: false
+  notif_from: "%(app)s <noreply@%(server_name)s>"
+  app_name: Matrix
+  enable_notifs: false
+  notif_for_new_users: true
+  client_base_url: "https://app.element.io"
+
+password_config:
+   policy:
+      enabled: false
+
+push:
+  include_content: true
+  group_unread_count_by_room: false
