@@ -13,8 +13,8 @@ services:
     container_name: traefik
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "84:80"
+      - "4423:443"
       - "8448:8448"  # Fédération Matrix
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -144,7 +144,6 @@ services:
       --no-multicast-peers
       --no-cli
       --no-tlsv1
-      --no-tlsv1_1
       --pidfile=/var/lib/coturn/turnserver.pid
       --log-file=stdout
       --simple-log

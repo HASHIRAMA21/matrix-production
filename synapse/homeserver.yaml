@@ -50,7 +50,7 @@ registrations_require_3pid:
   - email
 allowed_local_3pids:
   - medium: email
-    pattern: '.*@exemple\.com'
+    pattern: '.*@ndinga237\.com'
 
 # TURN/STUN
 turn_uris:

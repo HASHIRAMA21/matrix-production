@@ -4,7 +4,7 @@ global:
 
 entryPoints:
   web:
-    address: ":8080"
+    address: ":8079"
     http:
       redirections:
         entryPoint:
@@ -18,7 +18,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: admin@example.com
+      email: vinsd95@gmail.com
       storage: /certs/acme.json
       httpChallenge:
         entryPoint: web
