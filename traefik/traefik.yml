@@ -18,7 +18,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: vinsd95@gmail.com
+      email: admin@matrix.ndinga237.com
       storage: /certs/acme.json
       httpChallenge:
         entryPoint: web

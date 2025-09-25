@@ -33,7 +33,7 @@ redis:
   enabled: true
   host: redis
   port: 6379
-  password: votre_mot_de_passe_postgres_securise
+  password: votre_mot_de_passe_redis_securise
 
 # Logging
 log_config: "/data/log.config"

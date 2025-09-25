@@ -7,19 +7,37 @@ networks:
     external: true
 
 services:
+  # Init container pour les permissions des volumes
+  volume-permissions:
+    image: busybox:latest
+    container_name: matrix_volume_permissions
+    volumes:
+      - postgres_data:/postgres_data
+      - redis_data:/redis_data
+      - synapse_data:/synapse_data
+      - prometheus_data:/prometheus_data
+      - grafana_data:/grafana_data
+      - coturn_data:/coturn_data
+    command: >
+      sh -c "
+      chown -R 501:20 /postgres_data /redis_data /synapse_data /prometheus_data /grafana_data /coturn_data &&
+      chmod -R 755 /postgres_data /redis_data /synapse_data /prometheus_data /grafana_data /coturn_data &&
+      echo 'Volume permissions set successfully'
+      "
+
   # Reverse Proxy avec SSL automatique
   traefik:
     image: traefik:v3.0
     container_name: traefik
     restart: unless-stopped
     ports:
-      - "84:80"
-      - "4423:443"
+      - "86:8079"
+      - "8443:8443"
       - "8448:8448"  # Fédération Matrix
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml
+      - ./traefik/dynamic:/etc/traefik/dynamic
       - traefik_certs:/certs
     environment:
       - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL=admin@${DOMAIN}
@@ -38,16 +56,21 @@ services:
     image: postgres:15-alpine
     container_name: matrix_postgres
     restart: unless-stopped
+    user: "501:20"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      PGUSER: ${POSTGRES_USER}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - matrix
+    depends_on:
+      volume-permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 30s
@@ -59,13 +82,17 @@ services:
     image: redis:7-alpine
     container_name: matrix_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${POSTGRES_PASSWORD}
+    user: "501:20"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     networks:
       - matrix
+    depends_on:
+      volume-permissions:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -75,10 +102,13 @@ services:
     image: matrixdotorg/synapse:latest
     container_name: matrix_synapse
     restart: unless-stopped
+    user: "501:20"
     environment:
       SYNAPSE_SERVER_NAME: ${SYNAPSE_SERVER_NAME}
       SYNAPSE_REPORT_STATS: "no"
       SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+      UID: 501
+      GID: 20
     volumes:
       - synapse_data:/data
       - ./synapse/homeserver.yaml:/data/homeserver.yaml:ro
@@ -87,6 +117,8 @@ services:
       - matrix
       - web
     depends_on:
+      volume-permissions:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -171,12 +203,16 @@ services:
     image: prom/prometheus:latest
     container_name: matrix_prometheus
     restart: unless-stopped
+    user: "501:20"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     networks:
       - matrix
       - web
+    depends_on:
+      volume-permissions:
+        condition: service_completed_successfully
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=web"
@@ -189,15 +225,22 @@ services:
     image: grafana/grafana:latest
     container_name: matrix_grafana
     restart: unless-stopped
+    user: "501:20"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${PROMETHEUS_PASSWORD}
       GF_SECURITY_ADMIN_USER: admin
+      GF_PATHS_DATA: /var/lib/grafana
+      GF_PATHS_LOGS: /var/lib/grafana/logs
+      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana:/etc/grafana/provisioning:ro
     networks:
       - matrix
       - web
+    depends_on:
+      volume-permissions:
+        condition: service_completed_successfully
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=web"
