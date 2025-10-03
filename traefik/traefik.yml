@@ -2,46 +2,95 @@ global:
   checkNewVersion: false
   sendAnonymousUsage: false
 
+# Points d'entrée
 entryPoints:
   web:
-    address: ":8079"
+    address: ":80"
     http:
       redirections:
         entryPoint:
           to: websecure
           scheme: https
+          permanent: true
+
   websecure:
-    address: ":8443"
+    address: ":443"
+    http:
+      tls:
+        options: default
+
+  # Port fédération Matrix
   federation:
     address: ":8448"
+    http:
+      tls:
+        options: default
 
 certificatesResolvers:
   letsencrypt:
     acme:
+      tlsChallenge: {}
       email: admin@matrix.ndinga237.com
       storage: /certs/acme.json
-      httpChallenge:
-        entryPoint: web
+      caServer: https://acme-v02.api.letsencrypt.org/directory
+      keyType: EC256
 
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
     network: web
+    watch: true
+
   file:
     directory: /etc/traefik/dynamic
     watch: true
 
+# Configuration de l'API et du Dashboard
 api:
   dashboard: true
+  debug: false
   insecure: false
 
+# Configuration TLS globale
+tls:
+  options:
+    default:
+      sslStrategies:
+        - "tls.SniStrict"
+      minVersion: "VersionTLS12"
+      cipherSuites:
+        - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+        - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+        - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+        - "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
+      curvePreferences:
+        - "X25519"
+        - "secp521r1"
+        - "secp384r1"
+
+# Logging
 log:
   level: INFO
+  format: json
 
-accessLog: {}
+# Logs d'accès
+accessLog:
+  format: json
+  bufferingSize: 100
 
+# Métriques Prometheus
 metrics:
   prometheus:
     addEntryPointsLabels: true
     addServicesLabels: true
+    addRoutersLabels: true
+    buckets:
+      - 0.1
+      - 0.3
+      - 1.2
+      - 5.0
+
+# Health check
+ping:
+  entryPoint: "websecure"
