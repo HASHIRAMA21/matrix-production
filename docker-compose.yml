@@ -2,83 +2,50 @@ version: '3.8'
 
 networks:
   matrix:
-    driver: bridge
-    name: matrix
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
+    external: true
+    name: matrix-network
   web:
     external: true
     name: web
 
 services:
+  # Configuration des permissions
   volume-permissions:
-    image: busybox:1.36-alpine
+    image: busybox:1.36
     container_name: matrix_volume_permissions
     volumes:
-      # Volumes de données
-      - postgres_data:/postgres_data
-      - redis_data:/redis_data
       - synapse_data:/synapse_data
       - prometheus_data:/prometheus_data
       - grafana_data:/grafana_data
       - coturn_data:/coturn_data
-      # Répertoires de configuration
       - ./synapse/config:/synapse_config
       - ./synapse/keys:/synapse_keys
       - ./synapse/data:/synapse_host_data
     command: >
       sh -c "
-      echo 'Configuration des permissions des volumes...' &&
-
-      # PostgreSQL (uid:gid 999:999)
-      chown -R 999:999 /postgres_data &&
-      chmod -R 700 /postgres_data &&
-
-      # Redis (uid:gid 999:999)
-      chown -R 999:999 /redis_data &&
-      chmod -R 700 /redis_data &&
-
-      # Synapse (uid:gid 991:991)
-      chown -R 991:991 /synapse_data &&
-      chmod -R 755 /synapse_data &&
-
-      # Configuration Synapse accessible par le conteneur
-      chown -R 991:991 /synapse_config /synapse_keys /synapse_host_data &&
-      chmod -R 755 /synapse_config &&
-      chmod -R 750 /synapse_keys &&
-      chmod -R 755 /synapse_host_data &&
-
-      # Prometheus (uid:gid 65534:65534 - nobody)
+      chown -R 991:991 /synapse_data /synapse_config /synapse_keys /synapse_host_data &&
       chown -R 65534:65534 /prometheus_data &&
-      chmod -R 755 /prometheus_data &&
-
-      # Grafana (uid:gid 472:0)
       chown -R 472:0 /grafana_data &&
-      chmod -R 755 /grafana_data &&
-
-      # Coturn (uid:gid 101:102)
       chown -R 101:102 /coturn_data &&
-      chmod -R 755 /coturn_data &&
-
-      echo 'Permissions des volumes configurées avec succès!'
+      chmod -R 755 /synapse_data /synapse_config /synapse_host_data &&
+      chmod -R 750 /synapse_keys &&
+      chmod -R 755 /prometheus_data /grafana_data /coturn_data &&
+      echo 'Permissions configurées avec succès!'
       "
     restart: "no"
     user: "0:0"
 
-  # ============================================================================
-  # REVERSE PROXY TRAEFIK AVEC SSL AUTOMATIQUE
-  # ============================================================================
+  # Reverse proxy Traefik
   traefik:
     image: traefik:v3.1
     container_name: matrix_traefik
     restart: unless-stopped
     ports:
-      - "80:80"      # HTTP
-      - "443:443"    # HTTPS
-      - "8448:8448"  # Fédération Matrix
-      - "3478:3478"  # STUN
-      - "5349:5349"  # TURNS
+      - "${HTTP_PORT:-8081}:80"
+      - "${HTTPS_PORT:-8445}:443"
+      - "8448:8448"
+      - "3478:3478"
+      - "5349:5349"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
@@ -102,100 +69,37 @@ services:
       timeout: 10s
       retries: 3
 
-  # ============================================================================
-  # BASE DE DONNEES POSTGRESQL
-  # ============================================================================
-  postgres:
-    image: postgres:16-alpine
-    container_name: matrix_postgres
-    restart: unless-stopped
-    user: "999:999"
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
-      PGUSER: ${POSTGRES_USER}
-      PGDATA: /var/lib/postgresql/data/pgdata
-      TZ: ${TZ}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/pgdata
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - matrix
-    depends_on:
-      volume-permissions:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # ============================================================================
-  # CACHE REDIS
-  # ============================================================================
-  redis:
-    image: redis:7-alpine
-    container_name: matrix_redis
-    restart: unless-stopped
-    user: "999:999"
-    command: >
-      redis-server
-      --appendonly yes
-      --requirepass ${REDIS_PASSWORD}
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
-      --save 900 1
-      --save 300 10
-      --save 60 10000
-    volumes:
-      - redis_data:/data
-    networks:
-      - matrix
-    environment:
-      - TZ=${TZ}
-    depends_on:
-      volume-permissions:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # ============================================================================
-  # SERVEUR MATRIX SYNAPSE
-  # ============================================================================
+  # Matrix Synapse
   synapse:
     image: matrixdotorg/synapse:${SYNAPSE_VERSION:-latest}
     container_name: matrix_synapse
     restart: unless-stopped
     user: "991:991"
+    security_opt:
+      - apparmor=unconfined
+    extra_hosts:
+      - "postgres.host:${POSTGRES_HOST}"
+      - "redis.host:${REDIS_HOST}"
     environment:
       SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
       UID: 991
       GID: 991
       TZ: ${TZ}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TURN_SECRET: ${TURN_SECRET}
+      REGISTRATION_SHARED_SECRET: ${REGISTRATION_SHARED_SECRET}
     volumes:
-      # Volume principal de données Synapse
       - synapse_data:/data
-      # Configuration et clés générées
       - ./synapse/config/homeserver.yaml:/data/homeserver.yaml:ro
       - ./synapse/config/log.config:/data/log.config:ro
       - ./synapse/keys:/data/keys:ro
-      # Répertoires de données persistantes
       - ./synapse/data/media_store:/data/media_store
       - ./synapse/data/logs:/data/logs
       - ./synapse/data/uploads:/data/uploads
@@ -205,34 +109,22 @@ services:
     depends_on:
       volume-permissions:
         condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=web"
-
-      # API Client (port 443)
       - "traefik.http.routers.synapse.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.synapse.entrypoints=websecure"
       - "traefik.http.routers.synapse.tls.certresolver=letsencrypt"
       - "traefik.http.routers.synapse.service=synapse"
       - "traefik.http.services.synapse.loadbalancer.server.port=8008"
-
-      # Fédération Matrix (port 8448)
       - "traefik.http.routers.synapse-federation.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.synapse-federation.entrypoints=federation"
       - "traefik.http.routers.synapse-federation.tls.certresolver=letsencrypt"
       - "traefik.http.routers.synapse-federation.service=synapse-federation"
       - "traefik.http.services.synapse-federation.loadbalancer.server.port=8008"
-
-      # Headers de sécurité
       - "traefik.http.middlewares.matrix-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.matrix-headers.headers.customRequestHeaders.X-Forwarded-For="
       - "traefik.http.routers.synapse.middlewares=matrix-headers"
       - "traefik.http.routers.synapse-federation.middlewares=matrix-headers"
-
     healthcheck:
       test: ["CMD-SHELL", "curl -fSs http://localhost:8008/health || exit 1"]
       interval: 30s
@@ -240,15 +132,10 @@ services:
       retries: 5
       start_period: 60s
 
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
+  # NOTE: nginx supprimé - utilise le nginx existant sur la VPS
+  # Configurez votre nginx VPS pour servir Element depuis ./element/
 
-  # ============================================================================
-  # SERVEUR TURN/STUN COTURN
-  # ============================================================================
+  # Serveur TURN/STUN
   coturn:
     image: coturn/coturn:4.6.2-alpine
     container_name: matrix_coturn
@@ -266,8 +153,6 @@ services:
       -c /etc/coturn/turnserver.conf
       --listening-port=3478
       --tls-listening-port=5349
-      --alt-listening-port=3479
-      --alt-tls-listening-port=5350
       --min-port=49152
       --max-port=65535
       --fingerprint
@@ -278,57 +163,15 @@ services:
       --server-name=${DOMAIN}
       --cert=/certs/live/${DOMAIN}/fullchain.pem
       --pkey=/certs/live/${DOMAIN}/privkey.pem
-      --cipher-list=ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384
       --no-multicast-peers
       --no-cli
-      --no-tlsv1
-      --no-tlsv1_1
-      --pidfile=/var/lib/coturn/turnserver.pid
       --log-file=stdout
       --simple-log
-      --verbose
     depends_on:
       volume-permissions:
         condition: service_completed_successfully
 
-  # ============================================================================
-  # CLIENT WEB ELEMENT
-  # ============================================================================
-  nginx:
-    image: nginx:1.25-alpine
-    container_name: matrix_nginx
-    restart: unless-stopped
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./element:/usr/share/nginx/html:ro
-      - ./nginx/cache:/var/cache/nginx
-    environment:
-      - TZ=${TZ}
-    networks:
-      - web
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=web"
-      - "traefik.http.routers.element.rule=Host(`element.${DOMAIN}`)"
-      - "traefik.http.routers.element.entrypoints=websecure"
-      - "traefik.http.routers.element.tls.certresolver=letsencrypt"
-      - "traefik.http.services.element.loadbalancer.server.port=80"
-
-      # Headers de sécurité pour Element
-      - "traefik.http.middlewares.element-headers.headers.customRequestHeaders.X-Frame-Options=DENY"
-      - "traefik.http.middlewares.element-headers.headers.customRequestHeaders.X-Content-Type-Options=nosniff"
-      - "traefik.http.middlewares.element-headers.headers.customRequestHeaders.Referrer-Policy=strict-origin-when-cross-origin"
-      - "traefik.http.routers.element.middlewares=element-headers"
-
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ============================================================================
-  # MONITORING PROMETHEUS
-  # ============================================================================
+  # Monitoring Prometheus
   prometheus:
     image: prom/prometheus:v2.47.2
     container_name: matrix_prometheus
@@ -338,11 +181,7 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
-      - '--storage.tsdb.retention.size=1GB'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -362,15 +201,7 @@ services:
       - "traefik.http.routers.prometheus.tls.certresolver=letsencrypt"
       - "traefik.http.routers.prometheus.middlewares=auth"
 
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ============================================================================
-  # DASHBOARDS GRAFANA
-  # ============================================================================
+  # Dashboard Grafana
   grafana:
     image: grafana/grafana:10.1.5
     container_name: matrix_grafana
@@ -379,17 +210,8 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${PROMETHEUS_PASSWORD}
       GF_SECURITY_ADMIN_USER: admin
-      GF_PATHS_DATA: /var/lib/grafana
-      GF_PATHS_LOGS: /var/lib/grafana/logs
-      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
-      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
-      GF_INSTALL_PLUGINS: grafana-piechart-panel
       GF_SERVER_ROOT_URL: https://grafana.${DOMAIN}
-      GF_SMTP_ENABLED: true
-      GF_SMTP_HOST: ${SMTP_HOST}:${SMTP_PORT}
-      GF_SMTP_USER: ${SMTP_USER}
-      GF_SMTP_PASSWORD: ${SMTP_PASSWORD}
-      GF_SMTP_FROM_ADDRESS: ${SMTP_USER}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
       TZ: ${TZ}
     volumes:
       - grafana_data:/var/lib/grafana
@@ -400,8 +222,6 @@ services:
     depends_on:
       volume-permissions:
         condition: service_completed_successfully
-      prometheus:
-        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=web"
@@ -409,16 +229,6 @@ services:
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
 
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-# ============================================================================
-# VOLUMES PERSISTANTS
-# ============================================================================
 volumes:
   traefik_certs:
     name: matrix_traefik_certs
@@ -428,9 +238,5 @@ volumes:
     name: matrix_grafana_data
   synapse_data:
     name: matrix_synapse_data
-  postgres_data:
-    name: matrix_postgres_data
-  redis_data:
-    name: matrix_redis_data
   coturn_data:
     name: matrix_coturn_data

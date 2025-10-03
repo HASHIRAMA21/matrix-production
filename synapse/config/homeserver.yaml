@@ -1,8 +1,8 @@
-server_name: "matrix.ndinga237.com"
+server_name: !ENV DOMAIN
 pid_file: /data/homeserver.pid
-web_client_location: https://element.matrix.ndinga237.com/
+web_client_location: !ENV WEB_CLIENT_LOCATION
 
-public_baseurl: https://matrix.ndinga237.com/
+public_baseurl: !ENV PUBLIC_BASEURL
 
 serve_server_wellknown: true
 
@@ -16,24 +16,24 @@ listeners:
       - names: [client, federation]
         compress: false
 
-# Base de données PostgreSQL
+# Base de données PostgreSQL (service existant sur VPS)
 database:
   name: psycopg2
   args:
-    user: synapse_user
-    password: votre_mot_de_passe_postgres_securise
-    database: synapse
-    host: postgres
-    port: 5432
+    user: !ENV POSTGRES_USER
+    password: !ENV POSTGRES_PASSWORD
+    database: !ENV POSTGRES_DB
+    host: !ENV POSTGRES_HOST
+    port: !ENV POSTGRES_PORT
     cp_min: 5
     cp_max: 10
 
-# Cache Redis
+# Cache Redis (service existant sur VPS)
 redis:
   enabled: true
-  host: redis
-  port: 6379
-  password: your_secure_password
+  host: !ENV REDIS_HOST
+  port: !ENV REDIS_PORT
+  password: !ENV REDIS_PASSWORD
 
 # Logging
 log_config: "/data/log.config"
@@ -45,29 +45,29 @@ max_image_pixels: 32M
 
 # Registration
 enable_registration: false
-registration_shared_secret: "votre_secret_registration_tres_long"
+registration_shared_secret: !ENV REGISTRATION_SHARED_SECRET
 registrations_require_3pid:
   - email
 allowed_local_3pids:
   - medium: email
-    pattern: '.*@ndinga237.com'
+    pattern: !ENV EMAIL_PATTERN
 
 # TURN/STUN Configuration
 turn_uris:
-  - "turn:matrix.ndinga237.com:3478?transport=udp"
-  - "turn:matrix.ndinga237.com:3478?transport=tcp"
-  - "turns:matrix.ndinga237.com:5349?transport=udp"
-  - "turns:matrix.ndinga237.com:5349?transport=tcp"
-turn_shared_secret: "votre_secret_turn_tres_long_et_securise"
+  - "turn:!ENV DOMAIN:3478?transport=udp"
+  - "turn:!ENV DOMAIN:3478?transport=tcp"
+  - "turns:!ENV DOMAIN:5349?transport=udp"
+  - "turns:!ENV DOMAIN:5349?transport=tcp"
+turn_shared_secret: !ENV TURN_SECRET
 turn_user_lifetime: 86400000
 turn_allow_guests: false
 
 # Configuration Email
 email:
-  smtp_host: smtp.ndinga237.com
-  smtp_port: 587
-  smtp_user: noreply@ndinga237.com
-  smtp_pass: votre_mot_de_passe_email
+  smtp_host: !ENV SMTP_HOST
+  smtp_port: !ENV SMTP_PORT
+  smtp_user: !ENV SMTP_USER
+  smtp_pass: !ENV SMTP_PASSWORD
   force_tls: true
   notif_from: "Matrix <noreply@ndinga237.com>"
   app_name: Matrix
@@ -121,11 +121,6 @@ password_config:
     require_symbol: true
     require_lowercase: true
     require_uppercase: true
-
-# Configuration des modules
-modules:
-  - module: synapse.rest.admin.AdminRestResource
-    config: {}
 
 # Fonctionnalités expérimentales
 experimental_features:

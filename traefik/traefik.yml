@@ -2,10 +2,10 @@ global:
   checkNewVersion: false
   sendAnonymousUsage: false
 
-# Points d'entrée
+# Points d'entrée (ports configurables via docker-compose)
 entryPoints:
   web:
-    address: ":80"
+    address: ":80"  # Mappé vers HTTP_PORT dans docker-compose
     http:
       redirections:
         entryPoint:
@@ -14,7 +14,7 @@ entryPoints:
           permanent: true
 
   websecure:
-    address: ":443"
+    address: ":443"  # Mappé vers HTTPS_PORT dans docker-compose
     http:
       tls:
         options: default
