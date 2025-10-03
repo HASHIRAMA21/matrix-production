@@ -1,8 +1,8 @@
-server_name: !ENV DOMAIN
+server_name: "matrix.ndinga237.com"
 pid_file: /data/homeserver.pid
-web_client_location: !ENV WEB_CLIENT_LOCATION
+web_client_location: https://element.matrix.ndinga237.com/
 
-public_baseurl: !ENV PUBLIC_BASEURL
+public_baseurl: https://matrix.ndinga237.com/
 
 serve_server_wellknown: true
 
@@ -16,23 +16,24 @@ listeners:
       - names: [client, federation]
         compress: false
 
-# Base de données PostgreSQL (service existant sur VPS)
+# Base de données PostgreSQL
 database:
   name: psycopg2
   args:
-    user: !ENV POSTGRES_USER
-    password: !ENV POSTGRES_PASSWORD
-    database: !ENV POSTGRES_DB
-    host: !ENV POSTGRES_HOST
-    port: !ENV POSTGRES_PORT
+    user: synapse_user
+    password: votre_mot_de_passe_postgres_securise
+    database: synapse
+    host: postgres
+    port: 5432
     cp_min: 5
     cp_max: 10
 
-# Cache Redis (service existant sur VPS)
+# Cache Redis
 redis:
   enabled: true
-  host: !ENV REDIS_HOST
-  port: !ENV REDIS_PORT
+  host: redis
+  port: 6379
+  password: your_secure_password
 
 # Logging
 log_config: "/data/log.config"
@@ -44,29 +45,29 @@ max_image_pixels: 32M
 
 # Registration
 enable_registration: false
-registration_shared_secret: !ENV REGISTRATION_SHARED_SECRET
+registration_shared_secret: "votre_secret_registration_tres_long"
 registrations_require_3pid:
   - email
 allowed_local_3pids:
   - medium: email
-    pattern: !ENV EMAIL_PATTERN
+    pattern: '.*@ndinga237.com'
 
 # TURN/STUN Configuration
 turn_uris:
-  - "turn:!ENV DOMAIN:3478?transport=udp"
-  - "turn:!ENV DOMAIN:3478?transport=tcp"
-  - "turns:!ENV DOMAIN:5349?transport=udp"
-  - "turns:!ENV DOMAIN:5349?transport=tcp"
-turn_shared_secret: !ENV TURN_SECRET
+  - "turn:matrix.ndinga237.com:3478?transport=udp"
+  - "turn:matrix.ndinga237.com:3478?transport=tcp"
+  - "turns:matrix.ndinga237.com:5349?transport=udp"
+  - "turns:matrix.ndinga237.com:5349?transport=tcp"
+turn_shared_secret: "votre_secret_turn_tres_long_et_securise"
 turn_user_lifetime: 86400000
 turn_allow_guests: false
 
 # Configuration Email
 email:
-  smtp_host: !ENV SMTP_HOST
-  smtp_port: !ENV SMTP_PORT
-  smtp_user: !ENV SMTP_USER
-  smtp_pass: !ENV SMTP_PASSWORD
+  smtp_host: smtp.ndinga237.com
+  smtp_port: 587
+  smtp_user: noreply@ndinga237.com
+  smtp_pass: votre_mot_de_passe_email
   force_tls: true
   notif_from: "Matrix <noreply@ndinga237.com>"
   app_name: Matrix

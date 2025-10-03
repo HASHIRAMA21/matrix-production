@@ -464,13 +464,12 @@ create_synapse() {
     POSTGRES_HOST=$(grep "^POSTGRES_HOST=" .env | cut -d'=' -f2)
     REDIS_HOST=$(grep "^REDIS_HOST=" .env | cut -d'=' -f2)
 
-    # Création du conteneur avec apparmor=unconfined
+    # Création du conteneur avec apparmor=unconfined (sans user restriction)
     docker run -d \
         --name matrix_synapse \
         --restart unless-stopped \
         --security-opt apparmor=unconfined \
         --network matrix-network \
-        --user 991:991 \
         --add-host "postgres.host:$POSTGRES_HOST" \
         --add-host "redis.host:$REDIS_HOST" \
         -v matrix_synapse_data:/data \
@@ -482,8 +481,6 @@ create_synapse() {
         -v "$(pwd)/synapse/data/uploads:/data/uploads" \
         --env-file .env \
         -e SYNAPSE_CONFIG_PATH=/data/homeserver.yaml \
-        -e UID=991 \
-        -e GID=991 \
         matrixdotorg/synapse:latest
 
     success "Conteneur Synapse créé avec apparmor=unconfined"
@@ -497,14 +494,29 @@ setup_nginx() {
         error "nginx non détecté sur cette VPS"
     fi
 
-    # Copie des configurations
-    if sudo cp matrix.nginx.conf /etc/nginx/sites-available/matrix.conf; then
+    # Adaptation des chemins dans les configurations
+    CURRENT_DIR=$(pwd)
+    DOMAIN=$(grep "^DOMAIN=" .env | cut -d'=' -f2)
+
+    # Adaptation du fichier matrix
+    sed "s|matrix.ndinga237.com|$DOMAIN|g" matrix.nginx.conf > /tmp/matrix.conf
+
+    # Adaptation du fichier element
+    sed -e "s|element.matrix.ndinga237.com|element.$DOMAIN|g" \
+        -e "s|/home/vincess/DEVOPS/matrix-production/element|$CURRENT_DIR/element|g" \
+        element.nginx.conf > /tmp/element.conf
+
+    # Copie des configurations adaptées
+    if sudo cp /tmp/matrix.conf /etc/nginx/sites-available/matrix.conf; then
         success "Configuration matrix copiée"
     fi
 
-    if sudo cp element.nginx.conf /etc/nginx/sites-available/element.conf; then
+    if sudo cp /tmp/element.conf /etc/nginx/sites-available/element.conf; then
         success "Configuration element copiée"
     fi
+
+    # Nettoyage
+    rm -f /tmp/matrix.conf /tmp/element.conf
 
     # Activation des sites
     sudo ln -sf /etc/nginx/sites-available/matrix.conf /etc/nginx/sites-enabled/ 2>/dev/null
@@ -516,9 +528,12 @@ setup_nginx() {
         log "Redémarrez nginx : sudo systemctl reload nginx"
     else
         error "Erreur dans la configuration nginx"
+        log "Vérifiez les certificats SSL dans :"
+        log "  /etc/nginx/sites-available/matrix.conf"
+        log "  /etc/nginx/sites-available/element.conf"
     fi
 
-    warning "Adaptez les chemins SSL dans les fichiers de configuration"
+    warning "Adaptez les certificats SSL si nécessaire"
 }
 
 # Point d'entrée principal

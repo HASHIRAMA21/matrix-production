@@ -23,7 +23,7 @@ services:
       - ./synapse/data:/synapse_host_data
     command: >
       sh -c "
-      chown -R 991:991 /synapse_data /synapse_config /synapse_keys /synapse_host_data &&
+      chown -R root:root /synapse_data /synapse_config /synapse_keys /synapse_host_data &&
       chown -R 65534:65534 /prometheus_data &&
       chown -R 472:0 /grafana_data &&
       chown -R 101:102 /coturn_data &&
@@ -74,7 +74,6 @@ services:
     image: matrixdotorg/synapse:${SYNAPSE_VERSION:-latest}
     container_name: matrix_synapse
     restart: unless-stopped
-    user: "991:991"
     security_opt:
       - apparmor=unconfined
     extra_hosts:
@@ -82,8 +81,6 @@ services:
       - "redis.host:${REDIS_HOST}"
     environment:
       SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
-      UID: 991
-      GID: 991
       TZ: ${TZ}
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: ${POSTGRES_PORT}
