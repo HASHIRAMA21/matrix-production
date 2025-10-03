@@ -106,7 +106,7 @@ POSTGRES_PASSWORD=$(openssl rand -base64 32)
 # Redis (peut être sur VPS séparée)
 REDIS_HOST=VotreIPRedis
 REDIS_PORT=6379
-REDIS_PASSWORD=$(openssl rand -base64 32)
+REDIS_PASSWORD=
 
 # Ports Matrix
 HTTP_PORT=$HTTP_PORT
@@ -174,6 +174,31 @@ EOF
     rm -f /tmp/matrix_setup.sql
 }
 
+# Configuration dynamique de homeserver.yaml
+configure_homeserver() {
+    log "Configuration dynamique de homeserver.yaml..."
+
+    REDIS_PASSWORD=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2)
+
+    # Copie du template
+    cp synapse/config/homeserver.yaml synapse/config/homeserver.yaml.bak 2>/dev/null || true
+
+    # Ajout conditionnel du mot de passe Redis
+    if [ -n "$REDIS_PASSWORD" ]; then
+        log "Redis avec authentification"
+        # Ajouter la ligne password après port
+        sed '/port: !ENV REDIS_PORT/a\  password: !ENV REDIS_PASSWORD' synapse/config/homeserver.yaml > synapse/config/homeserver.yaml.tmp
+        mv synapse/config/homeserver.yaml.tmp synapse/config/homeserver.yaml
+    else
+        log "Redis sans authentification"
+        # S'assurer qu'il n'y a pas de ligne password
+        sed '/password: !ENV REDIS_PASSWORD/d' synapse/config/homeserver.yaml > synapse/config/homeserver.yaml.tmp
+        mv synapse/config/homeserver.yaml.tmp synapse/config/homeserver.yaml
+    fi
+
+    success "homeserver.yaml configuré"
+}
+
 # Validation de la configuration
 validate_config() {
     log "Validation de la configuration..."
@@ -183,7 +208,7 @@ validate_config() {
     # Variables obligatoires
     local required_vars=(
         "DOMAIN" "POSTGRES_HOST" "POSTGRES_PASSWORD"
-        "REDIS_HOST" "REDIS_PASSWORD" "TURN_SECRET"
+        "REDIS_HOST" "TURN_SECRET"
         "REGISTRATION_SHARED_SECRET"
     )
 
@@ -192,6 +217,9 @@ validate_config() {
             error "Variable $var non configurée dans .env"
         fi
     done
+
+    # Configuration dynamique de homeserver.yaml
+    configure_homeserver
 
     success "Configuration valide"
 }
@@ -217,6 +245,24 @@ test_connectivity() {
     if [[ "$REDIS_HOST" != "VotreIPRedis" ]]; then
         if nc -z "$REDIS_HOST" 6379 2>/dev/null; then
             success "Redis accessible ($REDIS_HOST:6379)"
+
+            # Test d'authentification si redis-cli disponible
+            if command -v redis-cli >/dev/null; then
+                REDIS_PASSWORD=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2)
+                if [ -n "$REDIS_PASSWORD" ]; then
+                    if redis-cli -h "$REDIS_HOST" -p 6379 -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q "PONG"; then
+                        success "Redis authentification OK"
+                    else
+                        warning "Problème authentification Redis"
+                    fi
+                else
+                    if redis-cli -h "$REDIS_HOST" -p 6379 ping 2>/dev/null | grep -q "PONG"; then
+                        success "Redis connexion OK (sans auth)"
+                    else
+                        warning "Redis nécessite peut-être une authentification"
+                    fi
+                fi
+            fi
         else
             warning "Redis non accessible ($REDIS_HOST:6379)"
         fi
@@ -234,6 +280,29 @@ test_connectivity() {
 
         if docker exec matrix_synapse nc -z "$REDIS_HOST" 6379 2>/dev/null; then
             success "Redis accessible depuis conteneur"
+
+            # Test spécifique Redis (avec ou sans auth)
+            REDIS_PASSWORD=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2)
+
+            # Installation de redis-cli si nécessaire
+            if ! docker exec matrix_synapse which redis-cli >/dev/null 2>&1; then
+                log "Installation de redis-cli dans le conteneur..."
+                docker exec matrix_synapse apt-get update -qq && docker exec matrix_synapse apt-get install -y -qq redis-tools >/dev/null 2>&1
+            fi
+
+            if [ -n "$REDIS_PASSWORD" ]; then
+                if docker exec matrix_synapse redis-cli -h "$REDIS_HOST" -p 6379 -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q "PONG"; then
+                    success "Redis authentification OK"
+                else
+                    warning "Problème authentification Redis"
+                fi
+            else
+                if docker exec matrix_synapse redis-cli -h "$REDIS_HOST" -p 6379 ping 2>/dev/null | grep -q "PONG"; then
+                    success "Redis connexion OK (sans auth)"
+                else
+                    warning "Problème connexion Redis"
+                fi
+            fi
         else
             warning "Redis non accessible depuis conteneur"
         fi

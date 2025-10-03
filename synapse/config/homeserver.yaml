@@ -33,7 +33,6 @@ redis:
   enabled: true
   host: !ENV REDIS_HOST
   port: !ENV REDIS_PORT
-  password: !ENV REDIS_PASSWORD
 
 # Logging
 log_config: "/data/log.config"
